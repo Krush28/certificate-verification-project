@@ -108,7 +108,7 @@ The backend sends the uploaded document to the configured OCR service.
 Current OCR configuration:
 
 ```env
-OCR_API_URL=http://192.168.1.34:8007
+OCR_API_URL=http:
 OCR_ENDPOINT_PATH=/api/extract
 ```
 
@@ -580,24 +580,24 @@ Create a local `.env` file using `.env.example` as the template.
 Example:
 
 ```env
-APP_HOST=0.0.0.0
-APP_PORT=8000
+APP_HOST=
+APP_PORT=
 CORS_ORIGINS=*
 DATA_DIR=./backend/data
 TOOL_GATEWAY_KEY=
 
 # OCR
-OCR_API_URL=http://192.168.1.34:8007
+OCR_API_URL=http:
 OCR_ENDPOINT_PATH=/api/extract
 OCR_API_KEY=
 OCR_AUTH_MODE=bearer
-OCR_AUTH_HEADER_NAME=x-api-key
+OCR_AUTH_HEADER_NAME=
 OCR_FILE_FIELD_NAME=file
 OCR_TIMEOUT_SECONDS=60
 
 # Local LLM
 LOCAL_LLM_ENABLED=true
-LOCAL_LLM_BASE_URL=http://localhost:11434/v1
+LOCAL_LLM_BASE_URL=
 LOCAL_LLM_API_KEY=
 LOCAL_LLM_MODEL=
 LOCAL_LLM_TIMEOUT_SECONDS=120
@@ -611,7 +611,7 @@ FRONTIER_TIMEOUT_SECONDS=120
 
 # MCP
 MCP_CLIENT_MODE=inprocess
-MCP_CLIENT_BASE_URL=http://localhost:8000
+MCP_CLIENT_BASE_URL=
 
 # Sandbox
 SANDBOX_PYTHON=
