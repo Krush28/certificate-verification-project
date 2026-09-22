@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+backend/data/
+# Local development databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Local backend data
+backend/backend/data/

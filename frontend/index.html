@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DocIntel Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0E1216;
+    --panel: #151A20;
+    --panel-2: #1B222A;
+    --border: #262E37;
+    --text: #E7EBEE;
+    --muted: #8A96A3;
+    --local: #55C7B8;      /* internal / sandboxed path */
+    --frontier: #E2A857;   /* external / frontier path */
+    --danger: #E27059;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  .app{
+    display:grid;
+    grid-template-columns: 260px 1fr 300px;
+    height:100vh;
+  }
+  @media (max-width: 900px){
+    .app{ grid-template-columns: 1fr; }
+    .sidebar, .trace{ display:none; }
+    .sidebar.open, .trace.open{ display:flex; position:fixed; inset:0; z-index:20; }
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{
+    background:var(--panel); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; padding:18px 14px; gap:18px; overflow-y:auto;
+  }
+  .brand{ font-family:var(--mono); font-size:13px; letter-spacing:.02em; color:var(--muted); }
+  .brand b{ color:var(--text); font-weight:600; }
+  .section-title{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:8px; }
+
+  .upload-zone{
+    border:1px dashed var(--border); border-radius:8px; padding:16px 12px;
+    text-align:center; cursor:pointer; transition:border-color .15s ease, background .15s ease;
+  }
+  .upload-zone:hover{ border-color:var(--local); background:rgba(85,199,184,0.06); }
+  .upload-zone input{ display:none; }
+  .upload-zone p{ margin:0; font-size:12.5px; color:var(--muted); line-height:1.5; }
+
+  .doc-list{ display:flex; flex-direction:column; gap:6px; font-size:12.5px; }
+  .doc-item{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:6px;
+    padding:8px 10px; display:flex; flex-direction:column; gap:2px;
+  }
+  .doc-item .fname{ color:var(--text); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .doc-item .meta{ color:var(--muted); font-family:var(--mono); font-size:10.5px; }
+
+  #pendingCount{ color:var(--frontier); }
+  .verify-item{
+    background:var(--panel-2); border:1px solid var(--frontier); border-radius:6px;
+    padding:8px 10px; display:flex; flex-direction:column; gap:6px; font-size:12px;
+  }
+  .verify-item .vurl{ color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .verify-item .vmsg{ color:var(--muted); font-size:11px; line-height:1.4; }
+  .verify-item .vactions{ display:flex; gap:6px; }
+  .verify-item .vactions button, .verify-item .vactions a{
+    flex:1; text-align:center; font-family:var(--mono); font-size:10.5px; padding:5px 4px;
+    border-radius:5px; border:1px solid var(--border); background:var(--panel); color:var(--muted);
+    cursor:pointer; text-decoration:none;
+  }
+  .verify-item .vactions .ok-btn{ color:var(--local); border-color:var(--local); }
+  .verify-item .vactions .bad-btn{ color:var(--danger); border-color:var(--danger); }
+
+  .route-toggle{ display:flex; gap:6px; }
+  .route-toggle button{
+    flex:1; background:var(--panel-2); border:1px solid var(--border); color:var(--muted);
+    border-radius:6px; padding:7px 4px; font-family:var(--mono); font-size:11px; cursor:pointer;
+    transition:all .15s ease;
+  }
+  .route-toggle button.active[data-r="local"]{ border-color:var(--local); color:var(--local); background:rgba(85,199,184,0.08); }
+  .route-toggle button.active[data-r="frontier"]{ border-color:var(--frontier); color:var(--frontier); background:rgba(226,168,87,0.08); }
+  .route-toggle button.active[data-r="auto"]{ border-color:var(--text); color:var(--text); background:var(--panel-2); }
+
+  .status-line{ font-family:var(--mono); font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+  .dot{ width:6px; height:6px; border-radius:50%; background:var(--muted); }
+  .dot.ok{ background:var(--local); }
+  .dot.off{ background:var(--danger); }
+
+  /* ---------- Chat ---------- */
+  .chat{ display:flex; flex-direction:column; height:100vh; min-width:0; }
+  .chat-header{
+    padding:16px 22px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .chat-header h1{ font-size:14.5px; font-weight:600; margin:0; }
+  .chat-header .sub{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:2px; }
+  .icon-btn{
+    display:none; background:none; border:1px solid var(--border); color:var(--muted);
+    border-radius:6px; width:30px; height:30px; cursor:pointer; font-size:14px;
+  }
+  @media (max-width:900px){ .icon-btn{ display:block; } }
+
+  .messages{ flex:1; overflow-y:auto; padding:22px; display:flex; flex-direction:column; gap:16px; }
+  .msg{ max-width:640px; line-height:1.55; font-size:14.5px; }
+  .msg.user{ align-self:flex-end; background:var(--panel-2); border:1px solid var(--border); border-radius:10px 10px 2px 10px; padding:11px 14px; }
+  .msg.assistant{ align-self:flex-start; padding:2px 0; }
+  .msg.assistant .route-tag{
+    display:inline-block; font-family:var(--mono); font-size:10px; text-transform:uppercase;
+    letter-spacing:.04em; padding:2px 6px; border-radius:4px; margin-bottom:6px;
+  }
+  .route-tag.local{ color:var(--local); background:rgba(85,199,184,0.1); }
+  .route-tag.frontier{ color:var(--frontier); background:rgba(226,168,87,0.1); }
+  .msg.system{ align-self:center; font-family:var(--mono); font-size:11.5px; color:var(--muted); }
+
+  .composer{
+    border-top:1px solid var(--border); padding:14px 22px calc(14px + env(safe-area-inset-bottom,0px));
+    display:flex; gap:10px;
+  }
+  .composer textarea{
+    flex:1; resize:none; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    border-radius:8px; padding:11px 12px; font-family:var(--sans); font-size:14px; height:44px; max-height:140px;
+  }
+  .composer textarea:focus{ outline:none; border-color:var(--local); }
+  .composer button{
+    background:var(--local); color:#08130F; border:none; border-radius:8px; padding:0 18px;
+    font-weight:600; font-size:13.5px; cursor:pointer;
+  }
+  .composer button:disabled{ opacity:.5; cursor:default; }
+
+  /* ---------- Trace panel ---------- */
+  .trace{ background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; padding:18px 14px; overflow-y:auto; }
+  .trace-empty{ font-family:var(--mono); font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.6; }
+  .tool-card{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:10px;
+    font-family:var(--mono); font-size:11px;
+  }
+  .tool-card .tname{ color:var(--text); font-weight:600; margin-bottom:4px; }
+  .tool-card .targs{ color:var(--muted); margin-bottom:6px; word-break:break-all; }
+  .tool-card .tresult{ color:#9FD8CE; white-space:pre-wrap; word-break:break-word; max-height:120px; overflow-y:auto; }
+
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><b>DocIntel</b> / orchestrator</div>
+
+    <div>
+      <div class="section-title">INGEST DOCUMENT</div>
+      <label class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" />
+        <p>Drop a certificate image/PDF or click to upload.<br/>Runs OCR → local LLM → sandbox scrape → field comparison → Dd verification.</p>
+      </label>
+      <input id="verificationUrl" type="url" placeholder="Verification URL (optional)" style="width:100%;margin-top:8px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px;font-size:11px;" />
+    </div>
+
+    <div>
+      <div class="section-title">INGESTED DOCS</div>
+      <div class="doc-list" id="docList"><div class="trace-empty">none yet</div></div>
+    </div>
+
+    <div>
+      <div class="section-title">VERIFICATION QUEUE <span id="pendingCount"></span></div>
+      <div class="doc-list" id="verifyList"><div class="trace-empty">nothing pending</div></div>
+    </div>
+
+    <div>
+      <div class="section-title">ROUTE</div>
+      <div class="route-toggle" id="routeToggle">
+        <button data-r="auto" class="active">auto</button>
+        <button data-r="local">local</button>
+        <button data-r="frontier">frontier</button>
+      </div>
+    </div>
+
+    <div style="margin-top:auto; display:flex; flex-direction:column; gap:6px;">
+      <div class="status-line"><span class="dot" id="dotLocal"></span> local llm</div>
+      <div class="status-line"><span class="dot" id="dotFrontier"></span> frontier api</div>
+      <div class="status-line"><span class="dot" id="dotOcr"></span> ocr service</div>
+    </div>
+  </aside>
+
+  <main class="chat">
+    <div class="chat-header">
+      <div>
+        <h1>Session</h1>
+        <div class="sub" id="sessionLabel">new session</div>
+      </div>
+      <button class="icon-btn" id="toggleSidebar">≡</button>
+      <button class="icon-btn" id="toggleTrace">⚙</button>
+    </div>
+    <div class="messages" id="messages">
+      <div class="msg system">Ask a question, or upload a document on the left to ingest it first.</div>
+    </div>
+    <div class="composer">
+      <textarea id="input" placeholder="Ask something…" rows="1"></textarea>
+      <button id="sendBtn">Send</button>
+    </div>
+  </main>
+
+  <aside class="trace" id="trace">
+    <div class="section-title">TOOL TRACE</div>
+    <div id="traceList"><div class="trace-empty">Tool calls made while answering your last message will appear here.</div></div>
+  </aside>
+
+</div>
+
+<script>
+const API = "";
+let sessionId = null;
+let routePref = "auto";
+
+const messagesEl = document.getElementById('messages');
+const traceListEl = document.getElementById('traceList');
+const docListEl = document.getElementById('docList');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('sendBtn');
+const sessionLabel = document.getElementById('sessionLabel');
+
+function addMessage(role, text, route){
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  if(role === 'assistant' && route){
+    const tag = document.createElement('div');
+    tag.className = 'route-tag ' + route;
+    tag.textContent = route;
+    div.appendChild(tag);
+    const body = document.createElement('div');
+    body.textContent = text;
+    div.appendChild(body);
+  } else {
+    div.textContent = text;
+  }
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function renderTrace(calls){
+  traceListEl.innerHTML = '';
+  if(!calls || calls.length === 0){
+    traceListEl.innerHTML = '<div class="trace-empty">No tools were called for the last answer.</div>';
+    return;
+  }
+  calls.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'tool-card';
+    card.innerHTML = `
+      <div class="tname">${c.tool}</div>
+      <div class="targs">${JSON.stringify(c.arguments)}</div>
+      <div class="tresult">${JSON.stringify(c.result).slice(0, 600)}</div>
+    `;
+    traceListEl.appendChild(card);
+  });
+}
+
+async function sendMessage(){
+  const text = inputEl.value.trim();
+  if(!text) return;
+  addMessage('user', text);
+  inputEl.value = '';
+  inputEl.style.height = '44px';
+  sendBtn.disabled = true;
+
+  try{
+    const resp = await fetch(`${API}/api/chat`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ message: text, session_id: sessionId, route: routePref })
+    });
+    if(!resp.ok){
+      const err = await resp.json().catch(()=>({detail: resp.statusText}));
+      addMessage('system', `Error: ${err.detail || resp.statusText}`);
+      return;
+    }
+    const data = await resp.json();
+    sessionId = data.session_id;
+    sessionLabel.textContent = 'session ' + sessionId.slice(0,8);
+    addMessage('assistant', data.reply, data.route);
+    renderTrace(data.tool_calls);
+  }catch(e){
+    addMessage('system', `Network error: ${e.message}`);
+  }finally{
+    sendBtn.disabled = false;
+  }
+}
+
+sendBtn.addEventListener('click', sendMessage);
+inputEl.addEventListener('keydown', e=>{
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+});
+inputEl.addEventListener('input', ()=>{
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
+});
+
+document.getElementById('routeToggle').addEventListener('click', e=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  routePref = btn.dataset.r;
+  [...document.querySelectorAll('#routeToggle button')].forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+});
+
+// ---- Upload / certificate verification ----
+const fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', async ()=>{
+  const file = fileInput.files[0];
+  if(!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  const suppliedUrl = document.getElementById('verificationUrl').value.trim();
+  if(suppliedUrl) fd.append('verification_url', suppliedUrl);
+  addMessage('system', `Uploading ${file.name}: OCR → local LLM → sandbox scraping → comparison → trusted Dd verification…`);
+  try{
+    const resp = await fetch(`${API}/api/certificate/verify-document`, { method:'POST', body: fd });
+    const data = await resp.json();
+    if(!resp.ok){
+      addMessage('system', `Certificate verification failed: ${data.detail || 'unknown error'}`);
+      return;
+    }
+    addMessage('assistant', `Certificate pipeline result: ${data.status}.\n\n${JSON.stringify(data.comparison || data.domain_verification || data.ocr_fields || {}, null, 2)}`);
+    loadDocs();
+    loadVerifyQueue();
+  }catch(e){
+    addMessage('system', `Verification error: ${e.message}`);
+  }
+  fileInput.value = '';
+});
+
+async function loadDocs(){
+  try{
+    const resp = await fetch(`${API}/api/documents?limit=20`);
+    const docs = await resp.json();
+    if(!docs.length){ docListEl.innerHTML = '<div class="trace-empty">none yet</div>'; return; }
+    docListEl.innerHTML = '';
+    docs.forEach(d=>{
+      const item = document.createElement('div');
+      item.className = 'doc-item';
+      const date = new Date(d.created_at * 1000).toLocaleString();
+      item.innerHTML = `<div class="fname">${d.filename}</div><div class="meta">${d.chars} chars · ${date}</div>`;
+      docListEl.appendChild(item);
+    });
+  }catch(e){ /* silent */ }
+}
+
+// ---- Verification queue ----
+async function loadVerifyQueue(){
+  try{
+    const resp = await fetch(`${API}/api/verification/pending`);
+    const items = await resp.json();
+    const countEl = document.getElementById('pendingCount');
+    const listEl = document.getElementById('verifyList');
+    countEl.textContent = items.length ? `(${items.length})` : '';
+    if(!items.length){ listEl.innerHTML = '<div class="trace-empty">nothing pending</div>'; return; }
+    listEl.innerHTML = '';
+    items.forEach(it=>{
+      const div = document.createElement('div');
+      div.className = 'verify-item';
+      div.innerHTML = `
+        <div class="vurl" title="${it.url}">${it.url}</div>
+        <div class="vmsg">CAPTCHA blocked automated check — needs a human look.</div>
+        <div class="vactions">
+          ${it.has_screenshot ? `<a href="${API}/api/verification/${it.id}/screenshot" target="_blank">View</a>` : ''}
+          <button class="ok-btn" data-id="${it.id}" data-status="verified">Verified</button>
+          <button class="bad-btn" data-id="${it.id}" data-status="invalid">Invalid</button>
+        </div>
+      `;
+      listEl.appendChild(div);
+    });
+  }catch(e){ /* silent */ }
+}
+
+document.getElementById('verifyList').addEventListener('click', async e=>{
+  const btn = e.target.closest('button[data-id]');
+  if(!btn) return;
+  await fetch(`${API}/api/verification/${btn.dataset.id}/resolve`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ status: btn.dataset.status })
+  });
+  loadVerifyQueue();
+});
+
+async function loadHealth(){
+  try{
+    const resp = await fetch(`${API}/api/health`);
+    const h = await resp.json();
+    document.getElementById('dotLocal').className = 'dot ' + (h.local_llm_enabled ? 'ok' : 'off');
+    document.getElementById('dotFrontier').className = 'dot ok';
+    document.getElementById('dotOcr').className = 'dot ' + (h.ocr_configured ? 'ok' : 'off');
+  }catch(e){
+    ['dotLocal','dotFrontier','dotOcr'].forEach(id=>document.getElementById(id).className='dot off');
+  }
+}
+
+document.getElementById('toggleSidebar').addEventListener('click', ()=>{
+  document.getElementById('sidebar').classList.toggle('open');
+});
+document.getElementById('toggleTrace').addEventListener('click', ()=>{
+  document.getElementById('trace').classList.toggle('open');
+});
+
+loadDocs();
+loadHealth();
+loadVerifyQueue();
+setInterval(loadVerifyQueue, 15000);
+</script>
+</body>
+</html>
