@@ -108,7 +108,7 @@ class FrontierLLMClient:
         if not self.cfg.api_key:
             raise FrontierLLMError("FRONTIER_API_KEY is not set for provider=openai.")
 
-        url = "https://api.openai.com/v1/chat/completions"
+        url = 
         full_messages = ([{"role": "system", "content": system}] if system else []) + messages
         payload: dict[str, Any] = {
             "model": self.cfg.model,
@@ -145,7 +145,7 @@ class FrontierLLMClient:
             raise FrontierLLMError("FRONTIER_API_KEY is not set for provider=gemini.")
 
         url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            "
             f"{self.cfg.model}:generateContent?key={self.cfg.api_key}"
         )
         contents = [
