@@ -59,7 +59,7 @@ class OCRClient:
         if not self.cfg.base_url:
             raise OCRError(
                 "OCR_API_URL is not configured. Set it in .env "
-                "(e.g. OCR_API_URL=http://192.168.1.34:8007)."
+                "(e.g. OCR_API_URL=     )."
             )
 
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
